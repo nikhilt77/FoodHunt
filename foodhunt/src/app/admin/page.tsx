@@ -18,6 +18,7 @@ import {
   Settings,
   Users,
   BarChart3,
+  ChefHat,
   Coffee,
   Bell,
   Search,
@@ -29,8 +30,7 @@ import {
   Star,
   Calendar,
   MapPin,
-  LogOut,
-  ChefHat
+  LogOut
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -1438,7 +1438,7 @@ export default function AdminPage() {
                       ))}
                     {orders.filter(order => order.status === 'preparing').length === 0 && (
                       <div className="text-center py-6">
-                        <Cook className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                        <ChefHat className="h-8 w-8 text-gray-300 mx-auto mb-2" />
                         <p className="text-gray-500 text-sm">No orders preparing</p>
                       </div>
                     )}

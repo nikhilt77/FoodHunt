@@ -64,8 +64,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  const refreshUser = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('No token found');
+      }
+
+      const response = await api.get('/auth/profile');
+      const userData = response.data; // Direct response, not wrapped in user property
+      
+      localStorage.setItem('user', JSON.stringify(userData));
+      setUser(userData);
+      return userData;
+    } catch (error: any) {
+      console.error('Failed to refresh user data:', error);
+      // If refresh fails, logout the user
+      logout();
+      throw new Error(error.response?.data?.message || 'Failed to refresh user data');
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, loading, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

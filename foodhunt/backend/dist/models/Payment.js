@@ -33,71 +33,40 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Order = void 0;
+exports.Payment = void 0;
 const mongoose_1 = __importStar(require("mongoose"));
-const orderSchema = new mongoose_1.Schema({
+const paymentSchema = new mongoose_1.Schema({
     userId: {
         type: String,
         required: true,
         ref: 'User'
     },
-    items: [{
-            foodItemId: {
-                type: String,
-                required: true,
-                ref: 'FoodItem'
-            },
-            quantity: {
-                type: Number,
-                required: true,
-                min: 1
-            },
-            price: {
-                type: Number,
-                required: true,
-                min: 0
-            }
-        }],
-    totalAmount: {
+    amount: {
         type: Number,
         required: true,
         min: 0
     },
-    status: {
+    type: {
         type: String,
-        enum: ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'],
-        default: 'pending'
-    },
-    orderType: {
-        type: String,
-        enum: ['immediate', 'scheduled'],
-        default: 'immediate'
-    },
-    scheduledTime: {
-        type: Date
-    },
-    paymentStatus: {
-        type: String,
-        enum: ['pending', 'paid', 'failed', 'refunded'],
-        default: 'pending'
-    },
-    paymentMethod: {
-        type: String,
-        enum: ['balance', 'cash', 'card'],
+        enum: ['credit', 'debit'],
         required: true
     },
-    notes: {
+    description: {
         type: String,
+        required: true,
         trim: true
     },
-    preparationStartedAt: {
-        type: Date
+    orderId: {
+        type: String,
+        ref: 'Order'
     },
-    estimatedReadyTime: {
-        type: Date
+    transactionId: {
+        type: String,
+        default: () => `TXN${Date.now()}`,
+        unique: true
     }
 }, {
     timestamps: true
 });
-exports.Order = mongoose_1.default.model('Order', orderSchema);
-//# sourceMappingURL=Order.js.map
+exports.Payment = mongoose_1.default.model('Payment', paymentSchema);
+//# sourceMappingURL=Payment.js.map

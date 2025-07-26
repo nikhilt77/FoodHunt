@@ -10,30 +10,36 @@
     "build:backend": "cd backend && npm run build",
     "build:full": "npm run build:backend && npm run build",
     "start": "next start",
-    "lint": "next lint"
+    "start:backend": "cd backend && npm start",
+    "start:production": "concurrently \"npm run start:backend\" \"npm start\"",
+    "lint": "next lint",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "deploy:vercel": "vercel --prod"
   },
   "dependencies": {
+    "@headlessui/react": "^1.7.0",
+    "axios": "^1.6.0",
+    "clsx": "^2.0.0",
+    "date-fns": "^2.30.0",
+    "lucide-react": "^0.400.0",
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "axios": "^1.6.0",
-    "lucide-react": "^0.400.0",
-    "@headlessui/react": "^1.7.0",
     "react-hook-form": "^7.48.0",
-    "date-fns": "^2.30.0",
-    "clsx": "^2.0.0",
     "tailwind-merge": "^2.0.0"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.0",
+    "concurrently": "^8.2.2",
     "eslint": "^8",
     "eslint-config-next": "^14.2.0",
     "postcss": "^8",
     "tailwindcss": "^3.4.0",
-    "typescript": "^5.3.0",
-    "concurrently": "^8.2.0",
-    "autoprefixer": "^10.4.0"
+    "typescript": "^5.3.0"
   }
 }

@@ -246,6 +246,8 @@ router.get('/admin/all', auth_1.authenticate, async (req, res) => {
             endDate.setDate(endDate.getDate() + 1);
             query.createdAt = { $gte: startDate, $lt: endDate };
         }
+        // Filter out orders with invalid user IDs
+        query.userId = { $regex: /^[0-9a-fA-F]{24}$/ };
         const orders = await Order_1.Order.find(query)
             .populate('items.foodItemId', 'name category price')
             .populate('userId', 'name studentId department')
@@ -291,7 +293,26 @@ router.patch('/admin/:orderId/status', auth_1.authenticate, async (req, res) => 
                 message: 'Invalid status'
             });
         }
-        const order = await Order_1.Order.findByIdAndUpdate(orderId, { status }, { new: true }).populate('items.foodItemId', 'name category')
+        // Get the order with populated food items to calculate preparation time
+        const existingOrder = await Order_1.Order.findById(orderId).populate('items.foodItemId', 'name category preparationTime');
+        if (!existingOrder) {
+            return res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+        }
+        // Calculate estimated ready time when order starts preparing
+        let updateData = { status };
+        if (status === 'preparing') {
+            const now = new Date();
+            updateData.preparationStartedAt = now;
+            // Calculate maximum preparation time from all items in the order
+            const maxPrepTime = Math.max(...existingOrder.items.map(item => item.foodItemId.preparationTime || 0));
+            // Add preparation time to current time
+            const estimatedReadyTime = new Date(now.getTime() + maxPrepTime * 60000); // Convert minutes to milliseconds
+            updateData.estimatedReadyTime = estimatedReadyTime;
+        }
+        const order = await Order_1.Order.findByIdAndUpdate(orderId, updateData, { new: true }).populate('items.foodItemId', 'name category preparationTime')
             .populate('userId', 'name studentId');
         if (!order) {
             return res.status(404).json({
@@ -310,6 +331,74 @@ router.patch('/admin/:orderId/status', auth_1.authenticate, async (req, res) => 
         res.status(500).json({
             success: false,
             message: 'Failed to update order status'
+        });
+    }
+});
+// Auto-update orders that are ready (called periodically)
+router.patch('/admin/auto-update-ready', auth_1.authenticate, async (req, res) => {
+    try {
+        // Check if user is admin
+        if (req.user?.role !== 'admin' && req.user?.role !== 'staff') {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied'
+            });
+        }
+        const now = new Date();
+        // Find all orders that are preparing and past their estimated ready time
+        const ordersToUpdate = await Order_1.Order.updateMany({
+            status: 'preparing',
+            estimatedReadyTime: { $lte: now }
+        }, {
+            status: 'ready'
+        });
+        res.json({
+            success: true,
+            message: `Updated ${ordersToUpdate.modifiedCount} orders to ready status`,
+            modifiedCount: ordersToUpdate.modifiedCount
+        });
+    }
+    catch (error) {
+        console.error('Error auto-updating orders:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to auto-update orders'
+        });
+    }
+});
+// Update order payment status
+router.patch('/:orderId', auth_1.authenticate, async (req, res) => {
+    try {
+        const { orderId } = req.params;
+        const { paymentStatus, paymentMethod, status } = req.body;
+        const userId = req.user?.id;
+        // Build update object
+        const updateData = {};
+        if (paymentStatus)
+            updateData.paymentStatus = paymentStatus;
+        if (paymentMethod)
+            updateData.paymentMethod = paymentMethod;
+        if (status)
+            updateData.status = status;
+        const order = await Order_1.Order.findOneAndUpdate({ _id: orderId, userId }, updateData, { new: true }).populate('items.foodItemId', 'name category')
+            .populate('userId', 'name studentId');
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Order not found'
+            });
+        }
+        res.json({
+            success: true,
+            message: 'Order updated successfully',
+            data: order
+        });
+    }
+    catch (error) {
+        console.error('Error updating order:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update order'
         });
     }
 });

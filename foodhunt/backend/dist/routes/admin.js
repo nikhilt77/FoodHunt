@@ -116,9 +116,14 @@ router.get('/students/dues', auth_1.authenticate, (0, auth_1.authorize)('admin')
                 $match: { role: 'student' }
             },
             {
+                $addFields: {
+                    userIdString: { $toString: '$_id' }
+                }
+            },
+            {
                 $lookup: {
                     from: 'orders',
-                    localField: '_id',
+                    localField: 'userIdString',
                     foreignField: 'userId',
                     as: 'orders'
                 }
@@ -158,7 +163,8 @@ router.get('/students/dues', auth_1.authenticate, (0, auth_1.authorize)('admin')
             {
                 $project: {
                     password: 0,
-                    orders: 0
+                    orders: 0,
+                    userIdString: 0
                 }
             }
         ]);

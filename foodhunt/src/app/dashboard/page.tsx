@@ -15,9 +15,10 @@ import {
 } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -30,7 +31,21 @@ export default function DashboardPage() {
       router.push('/admin');
       return;
     }
-  }, [user, router]);
+
+    // Refresh user data to get latest dues information
+    const refreshUserData = async () => {
+      try {
+        setRefreshing(true);
+        await refreshUser();
+      } catch (error) {
+        console.error('Failed to refresh user data:', error);
+      } finally {
+        setRefreshing(false);
+      }
+    };
+
+    refreshUserData();
+  }, [user?.email, router]); // Use user?.email to avoid infinite loop
 
   if (!user) {
     return (

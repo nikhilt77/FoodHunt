@@ -443,57 +443,6 @@ router.patch('/admin/auto-update-ready', authenticate, async (req: AuthRequest, 
   }
 });
 
-// Test endpoint for auto-update without authentication (for testing)
-router.get('/test/auto-update-ready', async (req: Request, res: Response) => {
-  try {
-    const now = new Date();
-    
-    // Find all orders that are preparing and past their estimated ready time
-    const preparingOrders = await Order.find({
-      status: 'preparing',
-      estimatedReadyTime: { $exists: true }
-    });
-
-    const readyOrders = preparingOrders.filter(order => 
-      order.estimatedReadyTime && order.estimatedReadyTime <= now
-    );
-
-    // Update orders that are ready
-    const ordersToUpdate = await Order.updateMany(
-      {
-        status: 'preparing',
-        estimatedReadyTime: { $lte: now }
-      },
-      {
-        status: 'ready'
-      }
-    );
-
-    res.json({
-      success: true,
-      message: `Auto-update check complete`,
-      currentTime: now,
-      preparingOrdersFound: preparingOrders.length,
-      readyOrdersFound: readyOrders.length,
-      ordersUpdated: ordersToUpdate.modifiedCount,
-      preparingOrders: preparingOrders.map(order => ({
-        id: order._id,
-        status: order.status,
-        preparationStartedAt: order.preparationStartedAt,
-        estimatedReadyTime: order.estimatedReadyTime,
-        isReady: order.estimatedReadyTime && order.estimatedReadyTime <= now
-      }))
-    });
-
-  } catch (error) {
-    console.error('Error testing auto-update:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to test auto-update'
-    });
-  }
-});
-
 // Update order payment status
 router.patch('/:orderId', authenticate, async (req: AuthRequest, res: Response) => {
   try {

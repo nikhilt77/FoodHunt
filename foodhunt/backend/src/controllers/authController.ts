@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import * as jwt from 'jsonwebtoken';
+import jwt, { Secret, SignOptions } from 'jsonwebtoken';
 import { body } from 'express-validator';
 import { User } from '../models/User';
 import { Transaction } from '../models/Transaction';
@@ -48,10 +48,16 @@ export const register = async (req: Request, res: Response) => {
 
     await user.save();
 
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET not defined');
+    }
+    const JWT_SECRET: Secret = process.env.JWT_SECRET;
+    const jwtExpiry = process.env.JWT_EXPIRES_IN || '7d';
+    
     const token = jwt.sign(
       { userId: user._id },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      JWT_SECRET,
+      { expiresIn: jwtExpiry } as SignOptions
     );
 
     res.status(201).json({
@@ -78,16 +84,37 @@ export const login = async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
+    // Calculate totalDues from pending orders
+    const { Order } = require('../models/Order');
+    const pendingOrders = await Order.find({
+      userId: user._id,
+      paymentStatus: 'pending'
+    });
+    
+    const totalDues = pendingOrders.reduce((sum: number, order: any) => sum + order.totalAmount, 0);
+
+    // Create user object with totalDues
+    const userWithDues = {
+      ...user.toJSON(),
+      totalDues
+    };
+
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET not defined');
+    }
+    const JWT_SECRET: Secret = process.env.JWT_SECRET;
+    const jwtExpiry = process.env.JWT_EXPIRES_IN || '7d';
+    
     const token = jwt.sign(
       { userId: user._id },
-      process.env.JWT_SECRET!,
-      { expiresIn: process.env.JWT_EXPIRES_IN }
+      JWT_SECRET,
+      { expiresIn: jwtExpiry } as SignOptions
     );
 
     res.json({
       message: 'Login successful',
       token,
-      user
+      user: userWithDues
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
@@ -97,7 +124,26 @@ export const login = async (req: Request, res: Response) => {
 export const getProfile = async (req: AuthRequest, res: Response) => {
   try {
     const user = await User.findById(req.user._id);
-    res.json(user);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Calculate totalDues from pending orders
+    const { Order } = require('../models/Order');
+    const pendingOrders = await Order.find({
+      userId: req.user._id,
+      paymentStatus: 'pending'
+    });
+    
+    const totalDues = pendingOrders.reduce((sum: number, order: any) => sum + order.totalAmount, 0);
+
+    // Create user object with totalDues
+    const userWithDues = {
+      ...user.toJSON(),
+      totalDues
+    };
+
+    res.json(userWithDues);
   } catch (error) {
     res.status(500).json({ message: 'Server error', error });
   }

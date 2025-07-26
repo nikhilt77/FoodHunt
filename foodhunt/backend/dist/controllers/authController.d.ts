@@ -8,7 +8,7 @@ export declare const authValidation: {
 };
 export declare const register: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export declare const login: (req: Request, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
-export declare const getProfile: (req: AuthRequest, res: Response) => Promise<void>;
+export declare const getProfile: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export declare const updateProfile: (req: AuthRequest, res: Response) => Promise<void>;
 export declare const addBalance: (req: AuthRequest, res: Response) => Promise<Response<any, Record<string, any>> | undefined>;
 export {};
