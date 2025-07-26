@@ -136,9 +136,14 @@ router.get('/students/dues', authenticate, authorize('admin'), async (req: Reque
         $match: { role: 'student' }
       },
       {
+        $addFields: {
+          userIdString: { $toString: '$_id' }
+        }
+      },
+      {
         $lookup: {
           from: 'orders',
-          localField: '_id',
+          localField: 'userIdString',
           foreignField: 'userId',
           as: 'orders'
         }
@@ -178,7 +183,8 @@ router.get('/students/dues', authenticate, authorize('admin'), async (req: Reque
       {
         $project: {
           password: 0,
-          orders: 0
+          orders: 0,
+          userIdString: 0
         }
       }
     ]);

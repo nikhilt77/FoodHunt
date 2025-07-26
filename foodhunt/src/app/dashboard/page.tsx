@@ -48,6 +48,8 @@ export default function DashboardPage() {
       router.push('/menu');
     } else if (href === '/dashboard/orders') {
       router.push('/menu'); // Will show orders tab
+    } else if (href === '/dashboard/wallet') {
+      router.push('/wallet');
     } else {
       // For unimplemented features, show alert
       alert(`${label} functionality coming soon!\n\nYou clicked: ${href}\nRole: ${user.role}`);

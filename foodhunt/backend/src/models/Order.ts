@@ -55,6 +55,12 @@ const orderSchema = new Schema<IOrder>({
   notes: {
     type: String,
     trim: true
+  },
+  preparationStartedAt: {
+    type: Date
+  },
+  estimatedReadyTime: {
+    type: Date
   }
 }, {
   timestamps: true

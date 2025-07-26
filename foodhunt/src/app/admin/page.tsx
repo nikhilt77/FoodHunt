@@ -29,7 +29,8 @@ import {
   Star,
   Calendar,
   MapPin,
-  LogOut
+  LogOut,
+  ChefHat
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -66,6 +67,39 @@ interface Reservation {
   };
 }
 
+interface OrderItem {
+  foodItemId: {
+    _id: string;
+    name: string;
+    category: string;
+    price: number;
+  };
+  quantity: number;
+  price: number;
+}
+
+interface Order {
+  _id: string;
+  userId: {
+    _id: string;
+    name: string;
+    studentId: string;
+    department: string;
+  };
+  items: OrderItem[];
+  totalAmount: number;
+  status: 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled';
+  orderType: 'immediate' | 'scheduled';
+  scheduledTime?: string;
+  paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
+  paymentMethod: 'balance' | 'cash' | 'card';
+  notes?: string;
+  preparationStartedAt?: string;
+  estimatedReadyTime?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface NewFoodItem {
   name: string;
   description: string;
@@ -81,6 +115,7 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [foodItems, setFoodItems] = useState<FoodItem[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [studentsWithDues, setStudentsWithDues] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddItem, setShowAddItem] = useState(false);
@@ -108,6 +143,17 @@ export default function AdminPage() {
     
     fetchData();
   }, [user, router]);
+
+  // Periodically check for orders that should be ready
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (activeTab === 'orders') {
+        autoUpdateReadyOrders();
+      }
+    }, 30000); // Check every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [activeTab]);
 
   const fetchData = async () => {
     try {
@@ -198,21 +244,19 @@ export default function AdminPage() {
         console.error('Error fetching menu:', error);
       }
       
-      // Fetch reservations data - temporarily disabled until admin routes are fixed
+      // Fetch orders data for kitchen dashboard
       try {
-        // const reservationsRes = await api.get('/admin/reservations');
-        // setReservations(reservationsRes.data.reservations);
-        setReservations([]); // Empty for now
+        const ordersRes = await api.get('/orders/admin/all');
+        setOrders(ordersRes.data.data || []);
       } catch (error) {
-        console.error('Error fetching reservations:', error);
-        setReservations([]);
+        console.error('Error fetching orders:', error);
+        setOrders([]);
       }
       
-      // Fetch dues data - temporarily disabled until admin routes are fixed
+      // Fetch dues data
       try {
-        // const duesRes = await api.get('/admin/students/dues');
-        // setStudentsWithDues(duesRes.data.data || []);
-        setStudentsWithDues([]); // Empty for now
+        const duesRes = await api.get('/admin/students/dues');
+        setStudentsWithDues(duesRes.data.data || []);
       } catch (error) {
         console.error('Error fetching dues:', error);
         setStudentsWithDues([]);
@@ -228,6 +272,42 @@ export default function AdminPage() {
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchData();
+    await autoUpdateReadyOrders(); // Also check for orders that should be ready
+  };
+
+  const autoUpdateReadyOrders = async () => {
+    try {
+      await api.patch('/orders/admin/auto-update-ready');
+      // Refresh orders after auto-update
+      const ordersRes = await api.get('/orders/admin/all');
+      setOrders(ordersRes.data.data || []);
+    } catch (error) {
+      console.error('Error auto-updating orders:', error);
+    }
+  };
+
+  const getTimeRemaining = (estimatedReadyTime: string) => {
+    const now = new Date();
+    const readyTime = new Date(estimatedReadyTime);
+    const diffMs = readyTime.getTime() - now.getTime();
+    
+    if (diffMs <= 0) return "Ready now!";
+    
+    const diffMins = Math.ceil(diffMs / (1000 * 60));
+    return `${diffMins} min${diffMins !== 1 ? 's' : ''} remaining`;
+  };
+
+  const getPreparationProgress = (order: Order) => {
+    if (!order.preparationStartedAt || !order.estimatedReadyTime) return 0;
+    
+    const startTime = new Date(order.preparationStartedAt).getTime();
+    const endTime = new Date(order.estimatedReadyTime).getTime();
+    const currentTime = new Date().getTime();
+    
+    const totalDuration = endTime - startTime;
+    const elapsed = currentTime - startTime;
+    
+    return Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
   };
 
   const markDuesAsPaid = async (studentId: string, orderIds?: string[]) => {
@@ -488,13 +568,19 @@ export default function AdminPage() {
     }
   };
 
-  const updateReservationStatus = async (reservationId: string, status: string) => {
+  const updateOrderStatus = async (orderId: string, status: string) => {
     try {
-      // TODO: Replace with working admin endpoint when available
-      console.log('Reservation status update not yet implemented:', reservationId, status);
-      alert('Reservation status update feature will be available once admin routes are fixed');
+      await api.patch(`/orders/admin/${orderId}/status`, { status });
+      
+      // Update local state
+      setOrders(orders.map(order => 
+        order._id === orderId ? { ...order, status: status as any } : order
+      ));
+      
+      alert(`Order status updated to ${status}`);
     } catch (error) {
-      console.error('Error updating reservation status:', error);
+      console.error('Error updating order status:', error);
+      alert('Failed to update order status');
     }
   };
 
@@ -506,11 +592,12 @@ export default function AdminPage() {
   };
 
   // Calculate summary statistics
-  const totalOrders = reservations.length;
-  const totalRevenue = reservations.reduce((sum, r) => sum + r.totalAmount, 0);
-  const pendingOrders = reservations.filter(r => r.status === 'pending').length;
-  const completedOrders = reservations.filter(r => r.status === 'completed').length;
-  const readyOrders = reservations.filter(r => r.status === 'ready').length;
+  const totalOrders = orders.length;
+  const totalRevenue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+  const pendingOrders = orders.filter(order => order.status === 'pending' || order.status === 'confirmed').length;
+  const completedOrders = orders.filter(order => order.status === 'completed').length;
+  const readyOrders = orders.filter(order => order.status === 'ready').length;
+  const preparingOrders = orders.filter(order => order.status === 'preparing').length;
 
   // Filter functions
   const filteredFoodItems = foodItems.filter(item => {
@@ -1233,7 +1320,7 @@ export default function AdminPage() {
             </div>
 
             {/* Order Status Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
               {/* Pending Orders */}
               <div className="bg-white rounded-2xl shadow-sm border-l-4 border-yellow-400">
                 <div className="p-6">
@@ -1247,38 +1334,112 @@ export default function AdminPage() {
                     </span>
                   </div>
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {reservations
-                      .filter(r => r.status === 'pending')
-                      .map((reservation) => (
-                        <div key={reservation._id} className="p-4 bg-yellow-50 rounded-xl">
+                    {orders
+                      .filter(order => order.status === 'pending' || order.status === 'confirmed')
+                      .map((order) => (
+                        <div key={order._id} className="p-4 bg-yellow-50 rounded-xl">
                           <div className="flex justify-between items-start mb-2">
                             <div>
-                              <p className="font-medium text-gray-900">{reservation.foodItem.name}</p>
+                              <p className="font-medium text-gray-900">
+                                {order.items.map(item => item.foodItemId.name).join(', ')}
+                              </p>
                               <p className="text-sm text-gray-600">
-                                {reservation.user.name} • Qty: {reservation.quantity}
+                                {order.userId.name} • Total Items: {order.items.reduce((sum, item) => sum + item.quantity, 0)}
                               </p>
                             </div>
                             <span className="text-lg font-bold text-yellow-600">
-                              ₹{reservation.totalAmount}
+                              ₹{order.totalAmount}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <p className="text-xs text-gray-500">
-                              Pickup: {new Date(reservation.preferredPickupTime).toLocaleTimeString()}
+                              Order: {new Date(order.createdAt).toLocaleTimeString()}
                             </p>
                             <button
-                              onClick={() => updateReservationStatus(reservation._id, 'ready')}
+                              onClick={() => updateOrderStatus(order._id, 'preparing')}
                               className="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                            >
+                              Start Preparing
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    {orders.filter(order => order.status === 'pending' || order.status === 'confirmed').length === 0 && (
+                      <div className="text-center py-6">
+                        <Clock className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-500 text-sm">No pending orders</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Preparing Orders */}
+              <div className="bg-white rounded-2xl shadow-sm border-l-4 border-purple-400">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 flex items-center">
+                      <ChefHat className="h-5 w-5 text-purple-500 mr-2" />
+                      Preparing Orders
+                    </h3>
+                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium">
+                      {preparingOrders}
+                    </span>
+                  </div>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    {orders
+                      .filter(order => order.status === 'preparing')
+                      .map((order) => (
+                        <div key={order._id} className="p-4 bg-purple-50 rounded-xl">
+                          <div className="flex justify-between items-start mb-2">
+                            <div>
+                              <p className="font-medium text-gray-900">
+                                {order.items.map(item => item.foodItemId.name).join(', ')}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                {order.userId.name} • ID: {order.userId.studentId}
+                              </p>
+                            </div>
+                            <span className="text-lg font-bold text-purple-600">
+                              ₹{order.totalAmount}
+                            </span>
+                          </div>
+                          
+                          {/* Progress Bar */}
+                          {order.estimatedReadyTime && (
+                            <div className="mb-3">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-xs text-gray-500">Progress</span>
+                                <span className="text-xs text-gray-500">
+                                  {getTimeRemaining(order.estimatedReadyTime)}
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div 
+                                  className="bg-purple-500 h-2 rounded-full transition-all duration-300"
+                                  style={{ width: `${getPreparationProgress(order)}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-gray-500">
+                              Items: {order.items.reduce((sum, item) => sum + item.quantity, 0)}
+                            </p>
+                            <button
+                              onClick={() => updateOrderStatus(order._id, 'ready')}
+                              className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                             >
                               Mark Ready
                             </button>
                           </div>
                         </div>
                       ))}
-                    {reservations.filter(r => r.status === 'pending').length === 0 && (
+                    {orders.filter(order => order.status === 'preparing').length === 0 && (
                       <div className="text-center py-6">
-                        <Clock className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                        <p className="text-gray-500 text-sm">No pending orders</p>
+                        <Cook className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-gray-500 text-sm">No orders preparing</p>
                       </div>
                     )}
                   </div>
@@ -1298,27 +1459,29 @@ export default function AdminPage() {
                     </span>
                   </div>
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {reservations
-                      .filter(r => r.status === 'ready')
-                      .map((reservation) => (
-                        <div key={reservation._id} className="p-4 bg-blue-50 rounded-xl">
+                    {orders
+                      .filter(order => order.status === 'ready')
+                      .map((order) => (
+                        <div key={order._id} className="p-4 bg-blue-50 rounded-xl">
                           <div className="flex justify-between items-start mb-2">
                             <div>
-                              <p className="font-medium text-gray-900">{reservation.foodItem.name}</p>
+                              <p className="font-medium text-gray-900">
+                                {order.items.map(item => item.foodItemId.name).join(', ')}
+                              </p>
                               <p className="text-sm text-gray-600">
-                                {reservation.user.name} • ID: {reservation.user.studentId}
+                                {order.userId.name} • ID: {order.userId.studentId}
                               </p>
                             </div>
                             <span className="text-lg font-bold text-blue-600">
-                              ₹{reservation.totalAmount}
+                              ₹{order.totalAmount}
                             </span>
                           </div>
                           <div className="flex items-center justify-between">
                             <p className="text-xs text-gray-500">
-                              Qty: {reservation.quantity}
+                              Items: {order.items.reduce((sum, item) => sum + item.quantity, 0)}
                             </p>
                             <button
-                              onClick={() => updateReservationStatus(reservation._id, 'completed')}
+                              onClick={() => updateOrderStatus(order._id, 'completed')}
                               className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                             >
                               Complete
@@ -1326,7 +1489,7 @@ export default function AdminPage() {
                           </div>
                         </div>
                       ))}
-                    {reservations.filter(r => r.status === 'ready').length === 0 && (
+                    {orders.filter(order => order.status === 'ready').length === 0 && (
                       <div className="text-center py-6">
                         <CheckCircle className="h-8 w-8 text-gray-300 mx-auto mb-2" />
                         <p className="text-gray-500 text-sm">No orders ready</p>
@@ -1349,23 +1512,25 @@ export default function AdminPage() {
                     </span>
                   </div>
                   <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {reservations
-                      .filter(r => r.status === 'completed')
+                    {orders
+                      .filter(order => order.status === 'completed')
                       .slice(0, 10)
-                      .map((reservation) => (
-                        <div key={reservation._id} className="p-4 bg-green-50 rounded-xl">
+                      .map((order) => (
+                        <div key={order._id} className="p-4 bg-green-50 rounded-xl">
                           <div className="flex justify-between items-center">
                             <div>
-                              <p className="font-medium text-gray-900">{reservation.foodItem.name}</p>
+                              <p className="font-medium text-gray-900">
+                                {order.items.map(item => item.foodItemId.name).join(', ')}
+                              </p>
                               <p className="text-sm text-gray-600">
-                                {reservation.user.name} • ₹{reservation.totalAmount}
+                                {order.userId.name} • ₹{order.totalAmount}
                               </p>
                             </div>
                             <CheckCircle className="h-5 w-5 text-green-500" />
                           </div>
                         </div>
                       ))}
-                    {reservations.filter(r => r.status === 'completed').length === 0 && (
+                    {orders.filter(order => order.status === 'completed').length === 0 && (
                       <div className="text-center py-6">
                         <Star className="h-8 w-8 text-gray-300 mx-auto mb-2" />
                         <p className="text-gray-500 text-sm">No completed orders</p>
@@ -1414,51 +1579,75 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {reservations.map((reservation) => (
-                      <tr key={reservation._id} className="hover:bg-gray-50">
+                    {orders.map((order) => (
+                      <tr key={order._id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div>
-                            <div className="text-sm font-medium text-gray-900">{reservation.user.name}</div>
-                            <div className="text-sm text-gray-500">{reservation.user.studentId}</div>
+                            <div className="text-sm font-medium text-gray-900">{order.userId.name}</div>
+                            <div className="text-sm text-gray-500">{order.userId.studentId}</div>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">{reservation.foodItem.name}</div>
-                          <div className="text-sm text-gray-500 capitalize">{reservation.foodItem.category}</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {order.items.map(item => item.foodItemId.name).join(', ')}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {order.items.map(item => item.foodItemId.category).join(', ')}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm text-gray-900">{reservation.quantity}</div>
+                          <div className="text-sm text-gray-900">
+                            {order.items.reduce((sum, item) => sum + item.quantity, 0)}
+                          </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="text-sm font-medium text-gray-900">₹{reservation.totalAmount}</div>
+                          <div className="text-sm font-medium text-gray-900">₹{order.totalAmount}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            reservation.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            reservation.status === 'ready' ? 'bg-blue-100 text-blue-800' :
-                            reservation.status === 'completed' ? 'bg-green-100 text-green-800' :
+                            order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                            order.status === 'confirmed' ? 'bg-blue-100 text-blue-800' :
+                            order.status === 'preparing' ? 'bg-purple-100 text-purple-800' :
+                            order.status === 'ready' ? 'bg-blue-100 text-blue-800' :
+                            order.status === 'completed' ? 'bg-green-100 text-green-800' :
                             'bg-red-100 text-red-800'
                           }`}>
-                            {reservation.status.toUpperCase()}
+                            {order.status.toUpperCase()}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {new Date(reservation.preferredPickupTime).toLocaleTimeString()}
+                          {new Date(order.createdAt).toLocaleTimeString()}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex space-x-2">
-                            {reservation.status === 'pending' && (
+                            {order.status === 'pending' && (
                               <button
-                                onClick={() => updateReservationStatus(reservation._id, 'ready')}
+                                onClick={() => updateOrderStatus(order._id, 'confirmed')}
+                                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                              >
+                                Confirm
+                              </button>
+                            )}
+                            {order.status === 'confirmed' && (
+                              <button
+                                onClick={() => updateOrderStatus(order._id, 'preparing')}
+                                className="bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                              >
+                                Start Preparing
+                              </button>
+                            )}
+                            {order.status === 'preparing' && (
+                              <button
+                                onClick={() => updateOrderStatus(order._id, 'ready')}
                                 className="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
                               >
                                 Mark Ready
                               </button>
                             )}
-                            {reservation.status === 'ready' && (
+                            {order.status === 'ready' && (
                               <button
-                                onClick={() => updateReservationStatus(reservation._id, 'completed')}
-                                className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
+                                onClick={() => updateOrderStatus(order._id, 'completed')}
+                                className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs font-medium transition-colors"
                               >
                                 Complete
                               </button>
@@ -1470,7 +1659,7 @@ export default function AdminPage() {
                   </tbody>
                 </table>
                 
-                {reservations.length === 0 && (
+                {orders.length === 0 && (
                   <div className="text-center py-12">
                     <ShoppingBag className="h-16 w-16 text-gray-300 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No orders yet today</h3>

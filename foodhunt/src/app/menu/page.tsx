@@ -77,12 +77,20 @@ export default function MenuPage() {
       const [menuRes, reservationsRes, duesRes] = await Promise.all([
         api.get('/food'),
         api.get('/reservations/my'),
-        api.get('/dues/summary')
+        api.get('/auth/dues')
       ]);
       
       setFoodItems(menuRes.data);
       setReservations(reservationsRes.data.reservations);
-      setDuesSummary(duesRes.data);
+      
+      // Handle new API response structure
+      const duesData = duesRes.data.data;
+      setDuesSummary({
+        totalDues: duesData.totalDues,
+        pendingPayments: duesData.orderCount,
+        overduePayments: 0,
+        nextDueDate: null
+      });
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {

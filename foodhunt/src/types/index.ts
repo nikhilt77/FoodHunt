@@ -7,6 +7,7 @@ export interface User {
   department?: string;
   year?: number;
   totalDues: number;
+  balance: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -63,6 +64,18 @@ export interface Transaction {
   balanceBefore: number;
   balanceAfter: number;
   createdAt: string;
+}
+
+export interface Payment {
+  _id: string;
+  userId: string;
+  amount: number;
+  type: 'credit' | 'debit';
+  description: string;
+  reservationId?: string;
+  transactionId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CartItem {

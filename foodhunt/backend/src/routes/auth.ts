@@ -1,26 +1,37 @@
-import { Router } from 'express';
-import {
-  register,
-  login,
+import express from 'express';
+import { 
+  register, 
+  login, 
   getProfile,
   updateProfile,
   addBalance,
   authValidation
 } from '../controllers/authController';
+import { 
+  createPayment, 
+  getUserPayments, 
+  getAllPayments,
+  getUserDues,
+  getUserBalance
+} from '../controllers/paymentController';
 import { authenticate, authorize } from '../middleware/auth';
-import { validateRequest } from '../middleware/validation';
 
-const router = Router();
+const router = express.Router();
 
-// Public routes
-router.post('/register', authValidation.register, validateRequest, register);
-router.post('/login', authValidation.login, validateRequest, login);
-
-// Protected routes
+// Auth routes
+router.post('/register', authValidation.register, register);
+router.post('/login', authValidation.login, login);
 router.get('/profile', authenticate, getProfile);
 router.put('/profile', authenticate, updateProfile);
 
-// Admin/Staff routes
+// Payment routes  
+router.post('/payments', authenticate, createPayment);
+router.get('/payments', authenticate, getUserPayments);
+router.get('/payments/all', authenticate, authorize('admin'), getAllPayments);
+router.get('/balance', authenticate, getUserBalance);
+router.get('/dues', authenticate, getUserDues);
+
+// Admin only routes
 router.post('/add-balance/:userId?', authenticate, authorize('admin', 'staff'), addBalance);
 
 export default router;

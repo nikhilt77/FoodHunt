@@ -49,6 +49,8 @@ export interface IOrder {
   paymentStatus: 'pending' | 'paid' | 'failed' | 'refunded';
   paymentMethod: 'balance' | 'cash' | 'card';
   notes?: string;
+  preparationStartedAt?: Date;
+  estimatedReadyTime?: Date;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -63,6 +65,18 @@ export interface ITransaction {
   balanceBefore: number;
   balanceAfter: number;
   createdAt?: Date;
+}
+
+export interface IPayment {
+  _id?: string;
+  userId: string;
+  amount: number;
+  type: 'credit' | 'debit';
+  description: string;
+  orderId?: string;
+  transactionId: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export interface IInventory {
