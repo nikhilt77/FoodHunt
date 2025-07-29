@@ -1,0 +1,30 @@
+services:
+  # Backend API Service
+  - type: web
+    name: foodhunt-backend
+    env: node
+    buildCommand: cd backend && npm install && npm run build
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        value: mongodb+srv://Foodhunt_Admin:1234@foodhunt.hdgwbbw.mongodb.net/foodhunt_canteen?retryWrites=true&w=majority&appName=FoodHunt
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: PORT
+        value: 5002
+
+  # Frontend Web Service  
+  - type: web
+    name: foodhunt-frontend
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://foodhunt-backend.onrender.com
