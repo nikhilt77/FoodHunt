@@ -2,33 +2,8 @@
   "version": 2,
   "builds": [
     {
-      "src": "backend/src/server.ts",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "backend/src/**",
-          "backend/package.json"
-        ]
-      }
-    },
-    {
       "src": "package.json",
       "use": "@vercel/next"
     }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/backend/src/server.ts"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
-    }
-  ],
-  "env": {
-    "MONGODB_URI": "@mongodb_uri",
-    "JWT_SECRET": "@jwt_secret",
-    "NODE_ENV": "production"
-  }
+  ]
 }
