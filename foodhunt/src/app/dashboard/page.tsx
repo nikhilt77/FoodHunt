@@ -3,6 +3,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import api from '@/lib/api';
 import { 
   User, 
   ShoppingCart, 
@@ -14,11 +15,27 @@ import {
   X
 } from 'lucide-react';
 
+interface UserStats {
+  ordersThisMonth: number;
+  totalOrders: number;
+  totalSpent: number;
+  totalDues: number;
+  recentOrders: any[];
+}
+
 export default function DashboardPage() {
   const { user, logout, refreshUser } = useAuth();
   const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [userStats, setUserStats] = useState<UserStats>({
+    ordersThisMonth: 0,
+    totalOrders: 0,
+    totalSpent: 0,
+    totalDues: 0,
+    recentOrders: []
+  });
+  const [loadingStats, setLoadingStats] = useState(true);
 
   useEffect(() => {
     if (!user) {
@@ -44,7 +61,25 @@ export default function DashboardPage() {
       }
     };
 
+    // Fetch user statistics
+    const fetchUserStats = async () => {
+      try {
+        setLoadingStats(true);
+        
+        const response = await api.get('/orders/stats/user');
+        
+        if (response.data.success) {
+          setUserStats(response.data.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch user stats:', error);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+
     refreshUserData();
+    fetchUserStats();
   }, [user?.email, router]); // Use user?.email to avoid infinite loop
 
   if (!user) {
@@ -211,7 +246,9 @@ export default function DashboardPage() {
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600">Total Dues</p>
-                <p className="text-2xl font-bold text-gray-900">₹{user.totalDues?.toFixed(2) || '0.00'}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {loadingStats ? '...' : `₹${user.totalDues?.toFixed(2) || '0.00'}`}
+                </p>
               </div>
             </div>
           </div>
@@ -223,7 +260,9 @@ export default function DashboardPage() {
               </div>
               <div className="ml-4">
                 <p className="text-sm text-gray-600">Orders This Month</p>
-                <p className="text-2xl font-bold text-gray-900">0</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {loadingStats ? '...' : userStats.ordersThisMonth}
+                </p>
               </div>
             </div>
           </div>
@@ -234,8 +273,10 @@ export default function DashboardPage() {
                 <User className="text-purple-600" size={24} />
               </div>
               <div className="ml-4">
-                <p className="text-sm text-gray-600">Account Type</p>
-                <p className="text-2xl font-bold text-gray-900 capitalize">{user.role}</p>
+                <p className="text-sm text-gray-600">Total Orders</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {loadingStats ? '...' : userStats.totalOrders}
+                </p>
               </div>
             </div>
           </div>
@@ -260,14 +301,68 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* Recent activity placeholder */}
+        {/* Recent activity */}
         <div className="mt-8">
           <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
-            <div className="text-center py-8 text-gray-500">
-              <p>No recent activity</p>
-              <p className="text-sm mt-2">Start by placing your first order!</p>
-            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Orders</h3>
+            {loadingStats ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>Loading recent orders...</p>
+              </div>
+            ) : userStats.recentOrders.length > 0 ? (
+              <div className="space-y-4">
+                {userStats.recentOrders.map((order) => (
+                  <div key={order._id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-medium text-gray-900">
+                          Order #{order._id.slice(-6)}
+                        </h4>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          order.status === 'completed' 
+                            ? 'bg-green-100 text-green-800'
+                            : order.status === 'preparing'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : order.status === 'ready'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {order.status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {order.items.map((item: any) => `${item.quantity}x ${item.foodItemId?.name || 'Unknown'}`).join(', ')}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(order.createdAt).toLocaleDateString('en-IN', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-medium text-gray-900">₹{order.totalAmount}</p>
+                      <p className={`text-xs ${
+                        order.paymentStatus === 'paid' 
+                          ? 'text-green-600' 
+                          : 'text-orange-600'
+                      }`}>
+                        {order.paymentStatus === 'paid' ? 'Paid' : 'Pending'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <ShoppingCart size={48} className="mx-auto mb-4 text-gray-300" />
+                <p>No orders yet</p>
+                <p className="text-sm mt-2">Start by placing your first order!</p>
+              </div>
+            )}
           </div>
         </div>
       </main>

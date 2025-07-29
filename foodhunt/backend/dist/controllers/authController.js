@@ -25,6 +25,12 @@ exports.authValidation = {
 const register = async (req, res) => {
     try {
         const { studentId, name, email, password, department, year } = req.body;
+        // Validate required fields
+        if (!studentId || !name || !email || !password) {
+            return res.status(400).json({
+                message: 'Missing required fields: studentId, name, email, password'
+            });
+        }
         const existingUser = await User_1.User.findOne({
             $or: [{ email }, { studentId }]
         });
@@ -55,7 +61,21 @@ const register = async (req, res) => {
         });
     }
     catch (error) {
-        res.status(500).json({ message: 'Server error', error });
+        // Handle specific validation errors
+        if (error.name === 'ValidationError') {
+            const fieldErrors = Object.keys(error.errors).map(field => {
+                return `${field}: ${error.errors[field].message}`;
+            }).join(', ');
+            return res.status(400).json({
+                message: `Validation failed: ${fieldErrors}`,
+                error: error.message,
+                type: 'validation'
+            });
+        }
+        res.status(500).json({
+            message: 'Server error',
+            error: error.message
+        });
     }
 };
 exports.register = register;

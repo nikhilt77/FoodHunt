@@ -53,7 +53,7 @@ router.post('/', authenticate, orderValidation.create, async (req: AuthRequest, 
     }
 
     const { items, orderType = 'immediate', scheduledTime, notes } = req.body;
-    const userId = req.user?.id;
+    const userId = req.user?._id;
 
     if (!userId) {
       return res.status(401).json({
@@ -154,7 +154,7 @@ router.post('/', authenticate, orderValidation.create, async (req: AuthRequest, 
 // Get user's orders
 router.get('/my-orders', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?._id;
     const { status, limit = 10, page = 1 } = req.query;
 
     const query: any = { userId };
@@ -194,7 +194,7 @@ router.get('/my-orders', authenticate, async (req: AuthRequest, res: Response) =
 router.get('/:orderId', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { orderId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id;
 
     const order = await Order.findOne({ _id: orderId, userId })
       .populate('items.foodItemId', 'name category price preparationTime description')
@@ -225,7 +225,7 @@ router.get('/:orderId', authenticate, async (req: AuthRequest, res: Response) =>
 router.patch('/:orderId/cancel', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { orderId } = req.params;
-    const userId = req.user?.id;
+    const userId = req.user?._id;
 
     const order = await Order.findOne({ _id: orderId, userId });
 
@@ -448,7 +448,7 @@ router.patch('/:orderId', authenticate, async (req: AuthRequest, res: Response) 
   try {
     const { orderId } = req.params;
     const { paymentStatus, paymentMethod, status } = req.body;
-    const userId = req.user?.id;
+    const userId = req.user?._id;
 
     // Build update object
     const updateData: any = {};
@@ -481,6 +481,97 @@ router.patch('/:orderId', authenticate, async (req: AuthRequest, res: Response) 
     res.status(500).json({
       success: false,
       message: 'Failed to update order'
+    });
+  }
+});
+
+// Get user statistics (orders count, total spent, etc.)
+router.get('/stats/user', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?._id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
+    // Get current month start and end dates
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+    // Count orders this month
+    const ordersThisMonth = await Order.countDocuments({
+      userId,
+      createdAt: {
+        $gte: monthStart,
+        $lte: monthEnd
+      }
+    });
+
+    // Count total orders
+    const totalOrders = await Order.countDocuments({ userId });
+
+    // Calculate total spent (completed orders only)
+    const totalSpentResult = await Order.aggregate([
+      {
+        $match: {
+          userId: userId,
+          paymentStatus: 'paid'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalSpent: { $sum: '$totalAmount' }
+        }
+      }
+    ]);
+
+    const totalSpent = totalSpentResult.length > 0 ? totalSpentResult[0].totalSpent : 0;
+
+    // Calculate total dues (pending orders)
+    const totalDuesResult = await Order.aggregate([
+      {
+        $match: {
+          userId: userId,
+          paymentStatus: 'pending'
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalDues: { $sum: '$totalAmount' }
+        }
+      }
+    ]);
+
+    const totalDues = totalDuesResult.length > 0 ? totalDuesResult[0].totalDues : 0;
+
+    // Get recent orders
+    const recentOrders = await Order.find({ userId })
+      .populate('items.foodItemId', 'name category price')
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    res.json({
+      success: true,
+      data: {
+        ordersThisMonth,
+        totalOrders,
+        totalSpent,
+        totalDues,
+        recentOrders
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching user statistics:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch user statistics'
     });
   }
 });

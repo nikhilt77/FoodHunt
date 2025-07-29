@@ -15,29 +15,103 @@ export default function RegisterPage() {
     year: 1,
   });
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{[key: string]: string}>({});
   const [loading, setLoading] = useState(false);
   
   const { register } = useAuth();
   const router = useRouter();
 
+  const validateField = (name: string, value: string | number) => {
+    const errors: {[key: string]: string} = {};
+    
+    switch (name) {
+      case 'studentId':
+        if (!value || (typeof value === 'string' && value.trim().length === 0)) {
+          errors.studentId = 'Student ID is required';
+        }
+        break;
+      case 'name':
+        if (!value || (typeof value === 'string' && value.trim().length < 2)) {
+          errors.name = 'Name must be at least 2 characters';
+        }
+        break;
+      case 'email':
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!value || (typeof value === 'string' && !emailRegex.test(value))) {
+          errors.email = 'Please enter a valid email address';
+        }
+        break;
+      case 'password':
+        if (!value || (typeof value === 'string' && value.length < 6)) {
+          errors.password = 'Password must be at least 6 characters long';
+        }
+        break;
+    }
+    
+    return errors;
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    const newValue = name === 'year' ? parseInt(value) : value;
+    
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'year' ? parseInt(value) : value
+      [name]: newValue
     }));
+
+    // Clear field-specific errors when user starts typing
+    if (fieldErrors[name]) {
+      setFieldErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+
+    // Validate the field
+    const errors = validateField(name, newValue);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(prev => ({ ...prev, ...errors }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setFieldErrors({});
+    
+    // Validate all fields before submission
+    let allErrors: {[key: string]: string} = {};
+    Object.entries(formData).forEach(([key, value]) => {
+      const errors = validateField(key, value);
+      allErrors = { ...allErrors, ...errors };
+    });
+
+    if (Object.keys(allErrors).length > 0) {
+      setFieldErrors(allErrors);
+      return;
+    }
+
     setLoading(true);
 
     try {
       await register(formData);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message);
+      console.error('Registration error:', err);
+      
+      // Handle specific validation errors from server
+      const errorMessage = err.message;
+      if (errorMessage.includes('password') && errorMessage.includes('shorter than the minimum')) {
+        setFieldErrors({ password: 'Password must be at least 6 characters long' });
+      } else if (errorMessage.includes('User already exists')) {
+        setError('A user with this email or student ID already exists. Please try different credentials or login instead.');
+      } else if (errorMessage.includes('validation failed')) {
+        setError('Please check your input and try again. Make sure all required fields are filled correctly.');
+      } else {
+        setError(errorMessage || 'Registration failed. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -69,9 +143,14 @@ export default function RegisterPage() {
               value={formData.studentId}
               onChange={handleChange}
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                fieldErrors.studentId ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              }`}
               placeholder="Enter your student ID"
             />
+            {fieldErrors.studentId && (
+              <p className="mt-1 text-sm text-red-600">{fieldErrors.studentId}</p>
+            )}
           </div>
 
           <div>
@@ -85,9 +164,14 @@ export default function RegisterPage() {
               value={formData.name}
               onChange={handleChange}
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                fieldErrors.name ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              }`}
               placeholder="Enter your full name"
             />
+            {fieldErrors.name && (
+              <p className="mt-1 text-sm text-red-600">{fieldErrors.name}</p>
+            )}
           </div>
 
           <div>
@@ -101,9 +185,14 @@ export default function RegisterPage() {
               value={formData.email}
               onChange={handleChange}
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                fieldErrors.email ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              }`}
               placeholder="Enter your email"
             />
+            {fieldErrors.email && (
+              <p className="mt-1 text-sm text-red-600">{fieldErrors.email}</p>
+            )}
           </div>
 
           <div>
@@ -117,9 +206,15 @@ export default function RegisterPage() {
               value={formData.password}
               onChange={handleChange}
               required
-              className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              placeholder="Enter your password"
+              className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                fieldErrors.password ? 'border-red-300 bg-red-50' : 'border-gray-300'
+              }`}
+              placeholder="Enter your password (min 6 characters)"
             />
+            {fieldErrors.password && (
+              <p className="mt-1 text-sm text-red-600">{fieldErrors.password}</p>
+            )}
+            <p className="mt-1 text-xs text-gray-500">Password must be at least 6 characters long</p>
           </div>
 
           <div>

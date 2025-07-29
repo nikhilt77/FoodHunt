@@ -27,6 +27,13 @@ export const register = async (req: Request, res: Response) => {
   try {
     const { studentId, name, email, password, department, year } = req.body;
 
+    // Validate required fields
+    if (!studentId || !name || !email || !password) {
+      return res.status(400).json({
+        message: 'Missing required fields: studentId, name, email, password'
+      });
+    }
+
     const existingUser = await User.findOne({
       $or: [{ email }, { studentId }]
     });
@@ -51,6 +58,7 @@ export const register = async (req: Request, res: Response) => {
     if (!process.env.JWT_SECRET) {
       throw new Error('JWT_SECRET not defined');
     }
+    
     const JWT_SECRET: Secret = process.env.JWT_SECRET;
     const jwtExpiry = process.env.JWT_EXPIRES_IN || '7d';
     
@@ -65,8 +73,24 @@ export const register = async (req: Request, res: Response) => {
       token,
       user
     });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
+  } catch (error: any) {
+    // Handle specific validation errors
+    if (error.name === 'ValidationError') {
+      const fieldErrors = Object.keys(error.errors).map(field => {
+        return `${field}: ${error.errors[field].message}`;
+      }).join(', ');
+      
+      return res.status(400).json({ 
+        message: `Validation failed: ${fieldErrors}`,
+        error: error.message,
+        type: 'validation'
+      });
+    }
+
+    res.status(500).json({ 
+      message: 'Server error', 
+      error: error.message
+    });
   }
 };
 
